@@ -58,25 +58,28 @@
     scene.add(ambientLight);
 
     // ---------------------------
-    // Textured Ground
+    // Textured Ground (Repeated Grass)
     // ---------------------------
     const loader = new THREE.TextureLoader();
     const grassTex = loader.load("Textures/Grass.png");
 
+    // Repeat the texture across the plane
     grassTex.wrapS = THREE.RepeatWrapping;
     grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.repeat.set(20, 20);
+
+    // Adjust these numbers to control how many times the texture repeats
+    grassTex.repeat.set(50, 50);
 
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(100, 100),
         new THREE.MeshStandardMaterial({ map: grassTex })
     );
-    ground.rotation.x = -Math.PI/2;
+    ground.rotation.x = -Math.PI / 2;
     ground.position.y = 0;
     scene.add(ground);
 
     // ---------------------------
-    // Test Wall (Hello Neighbor style)
+    // Test Wall
     // ---------------------------
     const wallGeo = new THREE.BoxGeometry(10, 5, 1);
     const wallMat = new THREE.MeshStandardMaterial({color:0xaa5533});
