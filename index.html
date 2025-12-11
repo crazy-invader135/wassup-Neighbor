@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Bright Blue 3D FPS</title>
+<title>Bright Blue FPS</title>
 <style>
   body { margin: 0; overflow: hidden; }
   canvas { display: block; }
@@ -11,7 +11,7 @@
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
 <script>
-window.onload = function(){
+window.onload = function() {
 
   // Scene
   const scene = new THREE.Scene();
@@ -28,14 +28,14 @@ window.onload = function(){
 
   // Floor
   const floorGeo = new THREE.PlaneGeometry(50,50);
-  const floorMat = new THREE.MeshBasicMaterial({color:0x0000ff}); // bright blue floor
+  const floorMat = new THREE.MeshBasicMaterial({color:0x0000ff});
   const floor = new THREE.Mesh(floorGeo,floorMat);
   floor.rotation.x = -Math.PI/2;
   scene.add(floor);
 
   // Cube
   const cubeGeo = new THREE.BoxGeometry();
-  const cubeMat = new THREE.MeshBasicMaterial({color:0x0000ff}); // bright blue cube
+  const cubeMat = new THREE.MeshBasicMaterial({color:0x0000ff});
   const cube = new THREE.Mesh(cubeGeo,cubeMat);
   cube.position.set(0,0.5,0);
   scene.add(cube);
@@ -44,7 +44,6 @@ window.onload = function(){
   let pitch=0, yaw=0;
   const speed = 0.1;
   const keys = {};
-
   document.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
   document.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
 
@@ -58,16 +57,16 @@ window.onload = function(){
   });
 
   function onMouseMove(e){
-    yaw -= e.movementX * 0.002;
-    pitch -= e.movementY * 0.002;
-    if(pitch > Math.PI/2) pitch=Math.PI/2;
-    if(pitch < -Math.PI/2) pitch=-Math.PI/2;
+    yaw -= e.movementX*0.002;
+    pitch -= e.movementY*0.002;
+    if(pitch>Math.PI/2) pitch=Math.PI/2;
+    if(pitch<-Math.PI/2) pitch=-Math.PI/2;
   }
 
   function animate(){
     requestAnimationFrame(animate);
 
-    let dx=0, dz=0;
+    let dx=0,dz=0;
     if(keys['w']) { dx += Math.sin(yaw)*speed; dz += Math.cos(yaw)*speed; }
     if(keys['s']) { dx -= Math.sin(yaw)*speed; dz -= Math.cos(yaw)*speed; }
     if(keys['a']) { dx += Math.cos(yaw)*speed; dz -= Math.sin(yaw)*speed; }
