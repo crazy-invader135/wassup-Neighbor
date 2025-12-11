@@ -1,167 +1,169 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>Hello Neighbor Style Game</title>
-    <style>
-        html, body { margin:0; padding:0; overflow:hidden; height:100%; background:#000; }
-        #instructions {
-            position:absolute; top:50%; left:50%;
-            transform:translate(-50%,-50%);
-            padding:20px; background:rgba(0,0,0,0.7);
-            color:white; font-family:Arial; text-align:center;
-            cursor:pointer;
-        }
-    </style>
+<meta charset="utf-8">
+<title>Hello Neighbor Style Game</title>
+<style>
+html, body { margin:0; padding:0; overflow:hidden; height:100%; background:#000; }
+#instructions {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    padding:20px; background:rgba(0,0,0,0.7);
+    color:white; font-family:Arial; text-align:center; cursor:pointer;
+}
+</style>
 </head>
 <body>
 
 <div id="instructions">Click to start<br>W A S D = Move<br>Mouse = Look<br>Space = Jump</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
 
 <script>
-    // Scene, Camera, Renderer
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({antialias:true});
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    // Lighting
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(10, 20, 10);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+// Lighting
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,20,10);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
 
-    // Ground
-    const loader = new THREE.TextureLoader();
-    const grassTex = loader.load("Textures/Grass.png");
-    grassTex.wrapS = THREE.RepeatWrapping;
-    grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.repeat.set(50,50);
-    const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(100,100),
-        new THREE.MeshStandardMaterial({ map: grassTex })
+// Ground
+const loader = new THREE.TextureLoader();
+const grassTex = loader.load("Textures/Grass.png");
+grassTex.wrapS = THREE.RepeatWrapping;
+grassTex.wrapT = THREE.RepeatWrapping;
+grassTex.repeat.set(50,50);
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(100,100),
+    new THREE.MeshStandardMaterial({map:grassTex})
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = 0;
+scene.add(ground);
+
+// Walls
+const walls = [];
+function addWall(x,y,z,w,h,d){
+    const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(w,h,d),
+        new THREE.MeshStandardMaterial({color:0xaa5533})
     );
-    ground.rotation.x = -Math.PI/2;
-    ground.position.y = 0;
-    scene.add(ground);
+    wall.position.set(x,y,z);
+    wall.userData.bbox = new THREE.Box3().setFromObject(wall);
+    scene.add(wall);
+    walls.push(wall);
+}
+addWall(0,2.5,-10,10,5,1);
+addWall(-5,2.5,0,1,5,10);
+addWall(5,2.5,5,10,5,1);
 
-    // Walls
-    const walls = [];
-    function addWall(x,y,z,w,h,d){
-        const wall = new THREE.Mesh(
-            new THREE.BoxGeometry(w,h,d),
-            new THREE.MeshStandardMaterial({ color:0xaa5533 })
-        );
-        wall.position.set(x,y,z);
-        scene.add(wall);
-        wall.userData.bbox = new THREE.Box3().setFromObject(wall);
-        walls.push(wall);
+// Mouse look
+let pitch = 0;
+let yaw = 0;
+const sensitivity = 0.002;
+const instructions = document.getElementById('instructions');
+instructions.addEventListener('click',()=>document.body.requestPointerLock());
+document.addEventListener('pointerlockchange',()=>instructions.style.display = document.pointerLockElement? 'none':'block');
+
+document.addEventListener('mousemove', e=>{
+    if(document.pointerLockElement){
+        yaw -= e.movementX*sensitivity;
+        pitch -= e.movementY*sensitivity;
+        pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
     }
-    addWall(0,2.5,-10,10,5,1);
-    addWall(-5,2.5,0,1,5,10);
-    addWall(5,2.5,5,10,5,1);
+});
 
-    // PointerLockControls on a "player" object
-    const player = new THREE.Object3D();
-    player.position.set(0,1.7,5);
-    scene.add(player);
-    player.add(camera);
-    const controls = new THREE.PointerLockControls(camera, document.body);
+// Player physics
+const player = new THREE.Object3D();
+player.position.set(0,1.7,5);
+scene.add(player);
+player.add(camera);
 
-    const instructions = document.getElementById('instructions');
-    instructions.addEventListener('click',()=>controls.lock());
-    controls.addEventListener('lock',()=>instructions.style.display='none');
-    controls.addEventListener('unlock',()=>instructions.style.display='');
+const keys = {w:false,a:false,s:false,d:false,space:false};
+document.addEventListener('keydown', e=>{ if(keys[e.key]!==undefined) keys[e.key]=true; });
+document.addEventListener('keyup', e=>{ if(keys[e.key]!==undefined) keys[e.key]=false; });
 
-    // Movement
-    const keys = {w:false,a:false,s:false,d:false,space:false};
-    document.addEventListener('keydown', e=>{ if(keys[e.key]!==undefined) keys[e.key]=true; });
-    document.addEventListener('keyup', e=>{ if(keys[e.key]!==undefined) keys[e.key]=false; });
+const velocity = new THREE.Vector3();
+const speed = 0.1;
+const gravity = 0.01;
+const jumpStrength = 0.25;
+const playerRadius = 0.3;
+const playerHeight = 1.7;
+let canJump = false;
 
-    const velocity = new THREE.Vector3();
-    const speed = 0.1;
-    const gravity = 0.01;
-    const jumpStrength = 0.25;
-    const playerRadius = 0.3;
-    const playerHeight = 1.7;
-    let canJump = false;
+// Collision helper
+function playerBBox(pos){
+    return new THREE.Box3(
+        new THREE.Vector3(pos.x-playerRadius,pos.y-playerHeight,pos.z-playerRadius),
+        new THREE.Vector3(pos.x+playerRadius,pos.y,pos.z+playerRadius)
+    );
+}
+function checkCollision(pos){
+    const bbox = playerBBox(pos);
+    for(let wall of walls){
+        if(bbox.intersectsBox(wall.userData.bbox)) return true;
+    }
+    return false;
+}
 
-    function playerBBox(pos){
-        return new THREE.Box3(
-            new THREE.Vector3(pos.x-playerRadius, pos.y-playerHeight, pos.z-playerRadius),
-            new THREE.Vector3(pos.x+playerRadius, pos.y, pos.z+playerRadius)
-        );
+// Animate
+function animate(){
+    requestAnimationFrame(animate);
+
+    // Horizontal movement
+    let moveDir = new THREE.Vector3();
+    const forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+    if(keys.w) moveDir.add(forward);
+    if(keys.s) moveDir.sub(forward);
+    if(keys.a) moveDir.sub(right);
+    if(keys.d) moveDir.add(right);
+    moveDir.normalize().multiplyScalar(speed);
+
+    const newPos = player.position.clone();
+    newPos.x += moveDir.x;
+    newPos.z += moveDir.z;
+
+    if(!checkCollision(newPos)){
+        player.position.x = newPos.x;
+        player.position.z = newPos.z;
     }
 
-    function checkCollision(newPos){
-        const bbox = playerBBox(newPos);
-        for(let wall of walls){
-            if(bbox.intersectsBox(wall.userData.bbox)) return true;
-        }
-        return false;
+    // Jump
+    if(keys.space && canJump){
+        velocity.y = jumpStrength;
+        canJump = false;
     }
 
-    function animate(){
-        requestAnimationFrame(animate);
+    // Gravity
+    velocity.y -= gravity;
+    player.position.y += velocity.y;
 
-        if(controls.isLocked){
-            // Movement input
-            const forward = new THREE.Vector3();
-            camera.getWorldDirection(forward);
-            forward.y = 0;
-            forward.normalize();
-            const right = new THREE.Vector3().crossVectors(forward,new THREE.Vector3(0,1,0));
-
-            let move = new THREE.Vector3();
-            if(keys.w) move.add(forward);
-            if(keys.s) move.sub(forward);
-            if(keys.a) move.sub(right);
-            if(keys.d) move.add(right);
-            move.normalize().multiplyScalar(speed);
-
-            // Tentative horizontal move
-            const newPos = player.position.clone();
-            newPos.x += move.x;
-            newPos.z += move.z;
-
-            if(!checkCollision(newPos)){
-                player.position.x = newPos.x;
-                player.position.z = newPos.z;
-            }
-
-            // Jump
-            if(keys.space && canJump){
-                velocity.y = jumpStrength;
-                canJump = false;
-            }
-
-            // Gravity
-            velocity.y -= gravity;
-            player.position.y += velocity.y;
-
-            // Floor collision
-            if(player.position.y < playerHeight){
-                player.position.y = playerHeight;
-                velocity.y = 0;
-                canJump = true;
-            }
-        }
-
-        renderer.render(scene, camera);
+    // Floor
+    if(player.position.y < playerHeight){
+        player.position.y = playerHeight;
+        velocity.y = 0;
+        canJump = true;
     }
-    animate();
 
-    window.addEventListener('resize',()=>{
-        camera.aspect = window.innerWidth/window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth,window.innerHeight);
-    });
+    // Apply rotation
+    player.rotation.y = yaw;
+    camera.rotation.x = pitch;
 
+    renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth,window.innerHeight);
+});
 </script>
-
 </body>
 </html>
