@@ -145,6 +145,11 @@ function animate() {
     renderer.render(scene, camera);
 }
 
+// Add this line temporarily to the end of game.js for debugging:
+window.scene = scene;
+window.camera = camera;
+window.interactiveObjects = interactiveObjects;
+
 animate();
 
 // (Window resize listener goes here)
