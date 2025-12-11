@@ -2,102 +2,91 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Minimal 3D FPS</title>
+<title>Mini 3D FPS Without Three.js</title>
 <style>
-  body { margin: 0; overflow: hidden; }
-  canvas { display: block; }
+  body { margin:0; overflow:hidden; }
+  canvas { display:block; background:#87ceeb; }
 </style>
 </head>
 <body>
-<script src="https://unpkg.com/three@0.162.0/build/three.min.js"></script>
+<canvas id="game"></canvas>
 <script>
-window.addEventListener('load', function(){
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-// Scene
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
+const map = [
+  [1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1],
+  [1,0,0,1,0,0,0,1],
+  [1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1],
+];
 
-// Camera
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0, 1.6, 5);
+let player = {x: 3.5, y: 3.5, angle: 0, fov: Math.PI/3};
 
-// Renderer
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// Floor
-const floorGeo = new THREE.PlaneGeometry(50,50);
-const floorMat = new THREE.MeshPhongMaterial({color:0x228B22});
-const floor = new THREE.Mesh(floorGeo, floorMat);
-floor.rotation.x = -Math.PI/2;
-scene.add(floor);
-
-// Cube
-const cubeGeo = new THREE.BoxGeometry();
-const cubeMat = new THREE.MeshPhongMaterial({color:0xff0000});
-const cube = new THREE.Mesh(cubeGeo, cubeMat);
-cube.position.set(0,0.5,0);
-scene.add(cube);
-
-// Lighting
-const light = new THREE.DirectionalLight(0xffffff,1);
-light.position.set(10,20,10);
-scene.add(light);
-scene.add(new THREE.AmbientLight(0x404040));
-
-// Mouse look
-let pitch = 0, yaw = 0;
-document.body.addEventListener('click',()=>{document.body.requestPointerLock();});
-document.addEventListener('pointerlockchange',()=>{
-    if(document.pointerLockElement === document.body){
-        document.addEventListener('mousemove', onMouseMove, false);
-    } else {
-        document.removeEventListener('mousemove', onMouseMove, false);
-    }
-});
-function onMouseMove(e){
-    yaw -= e.movementX * 0.002;
-    pitch -= e.movementY * 0.002;
-    if(pitch > Math.PI/2) pitch=Math.PI/2;
-    if(pitch < -Math.PI/2) pitch=-Math.PI/2;
-}
-
-// Movement
-let keys = {};
+const keys = {};
 document.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
 document.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
-const speed = 0.1;
 
-// Animation loop
-function animate(){
-    requestAnimationFrame(animate);
-
-    let dx=0, dz=0;
-    if(keys['w']) { dx += Math.sin(yaw)*speed; dz += Math.cos(yaw)*speed; }
-    if(keys['s']) { dx -= Math.sin(yaw)*speed; dz -= Math.cos(yaw)*speed; }
-    if(keys['a']) { dx += Math.cos(yaw)*speed; dz -= Math.sin(yaw)*speed; }
-    if(keys['d']) { dx -= Math.cos(yaw)*speed; dz += Math.sin(yaw)*speed; }
-
-    camera.position.x += dx;
-    camera.position.z += dz;
-
-    camera.rotation.order = "YXZ";
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
-
-    renderer.render(scene,camera);
-}
-animate();
-
-// Resize
-window.addEventListener('resize',()=>{
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+// Mouse look
+document.body.addEventListener('click', ()=>document.body.requestPointerLock());
+document.addEventListener('pointerlockchange', ()=>{
+  if(document.pointerLockElement===document.body){
+    document.addEventListener('mousemove', e=>{player.angle += e.movementX*0.002});
+  } else {
+    document.removeEventListener('mousemove', e=>{player.angle += e.movementX*0.002});
+  }
 });
 
-}); // end load
+function update(){
+  const speed = 0.05;
+  const dx = Math.cos(player.angle) * speed;
+  const dy = Math.sin(player.angle) * speed;
+  if(keys['w'] && map[Math.floor(player.y+dy)][Math.floor(player.x+dx)]===0){ player.x+=dx; player.y+=dy; }
+  if(keys['s'] && map[Math.floor(player.y-dy)][Math.floor(player.x-dx)]===0){ player.x-=dx; player.y-=dy; }
+  if(keys['a'] && map[Math.floor(player.y+dx)][Math.floor(player.x-dy)]===0){ player.x+=dx; player.y-=dy; }
+  if(keys['d'] && map[Math.floor(player.y-dx)][Math.floor(player.x+dy)]===0){ player.x-=dx; player.y+=dy; }
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const w = canvas.width;
+  const h = canvas.height;
+  const numRays = 120;
+  const stepAngle = player.fov / numRays;
+  
+  for(let i=0;i<numRays;i++){
+    const rayAngle = player.angle - player.fov/2 + i*stepAngle;
+    let dist = 0;
+    let hit = false;
+    let rayX = player.x;
+    let rayY = player.y;
+    while(!hit && dist<20){
+      rayX += Math.cos(rayAngle)*0.05;
+      rayY += Math.sin(rayAngle)*0.05;
+      dist += 0.05;
+      if(map[Math.floor(rayY)][Math.floor(rayX)]===1) hit=true;
+    }
+    const lineHeight = h / (dist + 0.0001);
+    ctx.strokeStyle = 'black';
+    ctx.beginPath();
+    ctx.moveTo(i*(w/numRays), h/2 - lineHeight/2);
+    ctx.lineTo(i*(w/numRays), h/2 + lineHeight/2);
+    ctx.stroke();
+  }
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
 </script>
 </body>
 </html>
