@@ -27,12 +27,9 @@
 </head>
 <body>
 
-<div id="instructions">Click to start<br>W A S D = Move<br>Mouse = Look</div>
+<div id="instructions">Click to start<br>W A S D = Move<br>Mouse = Look<br>Space = Jump</div>
 
-<!-- Load Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-<!-- Pointer Lock Controls -->
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
 
 <script>
@@ -58,16 +55,12 @@
     scene.add(ambientLight);
 
     // ---------------------------
-    // Textured Ground (Repeated Grass)
+    // Ground
     // ---------------------------
     const loader = new THREE.TextureLoader();
     const grassTex = loader.load("Textures/Grass.png");
-
-    // Repeat the texture across the plane
     grassTex.wrapS = THREE.RepeatWrapping;
     grassTex.wrapT = THREE.RepeatWrapping;
-
-    // Adjust these numbers to control how many times the texture repeats
     grassTex.repeat.set(50, 50);
 
     const ground = new THREE.Mesh(
@@ -93,44 +86,67 @@
     const controls = new THREE.PointerLockControls(camera, document.body);
     const instructions = document.getElementById('instructions');
 
-    instructions.addEventListener('click', () => {
-        controls.lock();
-    });
-
-    controls.addEventListener('lock', () => {
-        instructions.style.display = 'none';
-    });
-
-    controls.addEventListener('unlock', () => {
-        instructions.style.display = '';
-    });
+    instructions.addEventListener('click', () => controls.lock());
+    controls.addEventListener('lock', () => instructions.style.display = 'none');
+    controls.addEventListener('unlock', () => instructions.style.display = '');
 
     // ---------------------------
-    // Movement
+    // Movement & Physics
     // ---------------------------
-    const keys = { w: false, a: false, s: false, d: false };
+    const keys = { w: false, a: false, s: false, d: false, space: false };
+    document.addEventListener('keydown', e => { if (keys[e.key]!==undefined) keys[e.key]=true; });
+    document.addEventListener('keyup', e => { if (keys[e.key]!==undefined) keys[e.key]=false; });
 
-    document.addEventListener('keydown', (e) => {
-        if (keys[e.key] !== undefined) keys[e.key] = true;
-    });
-
-    document.addEventListener('keyup', (e) => {
-        if (keys[e.key] !== undefined) keys[e.key] = false;
-    });
+    // Player physics variables
+    let velocity = new THREE.Vector3();
+    const speed = 0.1;
+    const gravity = 0.01;
+    const jumpStrength = 0.25;
+    let canJump = false;
 
     // ---------------------------
-    // Animate
+    // Animate Loop
     // ---------------------------
     function animate() {
         requestAnimationFrame(animate);
 
-        const speed = 0.1;
-
         if (controls.isLocked) {
-            if (keys.w) controls.moveForward(speed);
-            if (keys.s) controls.moveForward(-speed);
-            if (keys.a) controls.moveRight(-speed);
-            if (keys.d) controls.moveRight(speed);
+            // Directional movement
+            let forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+
+            let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0));
+
+            let moveVec = new THREE.Vector3();
+            if(keys.w) moveVec.add(forward);
+            if(keys.s) moveVec.sub(forward);
+            if(keys.a) moveVec.sub(right);
+            if(keys.d) moveVec.add(right);
+            moveVec.normalize().multiplyScalar(speed);
+
+            velocity.x = moveVec.x;
+            velocity.z = moveVec.z;
+
+            // Jump
+            if(keys.space && canJump){
+                velocity.y = jumpStrength;
+                canJump = false;
+            }
+
+            // Apply gravity
+            velocity.y -= gravity;
+
+            // Update camera position
+            camera.position.add(velocity);
+
+            // Simple floor collision
+            if(camera.position.y < 1.7){ // player height
+                velocity.y = 0;
+                camera.position.y = 1.7;
+                canJump = true;
+            }
         }
 
         renderer.render(scene, camera);
@@ -139,7 +155,7 @@
     animate();
 
     // ---------------------------
-    // Handle Resize
+    // Resize handler
     // ---------------------------
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
