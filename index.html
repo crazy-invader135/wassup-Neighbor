@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Simple 3D First-Person Grass World - Three.js</title>
+    <title>Simple 3D First-Person Grass World with NPC - Three.js</title>
     <style>
         body { margin: 0; overflow: hidden; }
         #blocker {
@@ -56,6 +56,8 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import JSZip from 'https://cdn.skypack.dev/jszip@3';
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x88ccff);
@@ -65,6 +67,7 @@
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
         const controls = new PointerLockControls(camera, document.body);
@@ -80,7 +83,7 @@
         scene.add(controls.getObject());
         controls.getObject().position.y = 10; // Player eye height
 
-        // === Movement system (same as official example) ===
+        // === Movement system ===
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
@@ -112,29 +115,105 @@
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 500;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
         scene.add(dirLight);
 
-        // === Grass Floor with Texture ===
+        // === Grass Floor ===
         const textureLoader = new THREE.TextureLoader();
         const grassTexture = textureLoader.load('Textures/Grass.png');
-
-        // Make the grass tile nicely
         grassTexture.wrapS = THREE.RepeatWrapping;
         grassTexture.wrapT = THREE.RepeatWrapping;
-        grassTexture.repeat.set(100, 100); // Adjust for desired tile size
+        grassTexture.repeat.set(200, 200);
         grassTexture.encoding = THREE.sRGBEncoding;
 
-        const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+        const groundGeometry = new THREE.PlaneGeometry(2000, 2000);
         const groundMaterial = new THREE.MeshStandardMaterial({
             map: grassTexture,
             roughness: 0.8,
-            metalness: 0.2
+            metalness: 0.1
         });
-
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
+
+        // === Load NPC from ZIP in front of player start ===
+        async function loadNPC() {
+            try {
+                const response = await fetch('Models/NPC.zip');
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const zip = await JSZip.loadAsync(arrayBuffer);
+
+                const files = Object.values(zip.files).filter(item => !item.dir);
+                if (files.length === 0) throw new Error('No files found in ZIP');
+
+                // Find GLTF/GLB entry (prefer .gltf, take first match)
+                const modelFiles = files.filter(f => f.name.toLowerCase().endsWith('.gltf') || f.name.toLowerCase().endsWith('.glb'));
+                if (modelFiles.length === 0) throw new Error('No .gltf or .glb file found in ZIP');
+                const entryFile = modelFiles[0];
+
+                // Create Blob URLs for ALL files
+                const blobUrls = {};
+                await Promise.all(
+                    files.map(async (file) => {
+                        const blob = await file.async('blob');
+                        blobUrls[file.name] = URL.createObjectURL(blob);
+                    })
+                );
+
+                const entryUrl = blobUrls[entryFile.name];
+
+                // Custom LoadingManager to resolve ZIP resources
+                const manager = new THREE.LoadingManager();
+                manager.setURLModifier((url) => {
+                    try {
+                        const parsedUrl = new URL(url);
+                        const pathname = parsedUrl.pathname;
+                        const guidEndIndex = pathname.indexOf('/', 1);
+                        if (guidEndIndex === -1) return url;
+                        const relPath = pathname.substring(guidEndIndex + 1);
+                        return blobUrls[relPath] || url;
+                    } catch {
+                        return url;
+                    }
+                });
+
+                // Load the model
+                const loader = new GLTFLoader(manager);
+                loader.load(entryUrl, (gltf) => {
+                    const npc = gltf.scene;
+                    // Position in front of player start (adjust distance/scale as needed for your model)
+                    npc.position.set(0, 0, -30);
+                    npc.scale.set(1, 1, 1); // Scale your NPC model here
+
+                    // Enable shadows
+                    npc.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+
+                    scene.add(npc);
+                    console.log('NPC loaded and positioned!');
+                }, undefined, (error) => {
+                    console.error('Error loading GLTF:', error);
+                });
+
+                // Cleanup Blob URLs when model loaded (optional, but good practice)
+                // Note: Since one-time load, can revoke after some time if needed
+            } catch (error) {
+                console.error('Failed to load NPC.zip:', error);
+            }
+        }
+
+        loadNPC(); // Start loading
 
         // === Resize handler ===
         window.addEventListener('resize', () => {
@@ -164,7 +243,6 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
-                // Keep player floating at fixed height (simple walker)
                 controls.getObject().position.y = 10;
 
                 prevTime = time;
