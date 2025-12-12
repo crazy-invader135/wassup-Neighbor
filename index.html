@@ -2,19 +2,29 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Grass World + NPC from nested ZIP</title>
+    <title>Grass World + NPC (auto-start)</title>
     <style>
         body { margin: 0; overflow: hidden; }
-        #blocker { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
-        #instructions { text-align: center; color: white; font-family: Arial, sans-serif; cursor: pointer; }
-        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: white; font-size: 30px; pointer-events: none; }
+        #blocker {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center;
+            transition: opacity 0.5s;
+        }
+        #instructions {
+            text-align: center; color: white; font-family: Arial, sans-serif; cursor: pointer;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: white; font-size: 30px; pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div id="blocker">
         <div id="instructions">
-            <h1>Click to play</h1>
-            <p>WASD = move · Mouse = look · ESC = release cursor</p>
+            <h1>Loading… (auto-start in 1 second)</h1>
+            <p>WASD = move · Mouse = look · ESC = menu</p>
         </div>
     </div>
     <div id="crosshair">+</div>
@@ -35,7 +45,6 @@
         import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
         import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 
-        // ────────────────────── Basic scene setup ──────────────────────
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x88ccff);
         scene.fog = new THREE.Fog(0x88ccff, 10, 800);
@@ -48,40 +57,46 @@
         document.body.appendChild(renderer.domElement);
 
         const controls = new PointerLockControls(camera, renderer.domElement);
-        document.getElementById('blocker').addEventListener('click', () => controls.lock());
-        controls.addEventListener('lock', () => document.getElementById('blocker').style.display = 'none');
-        controls.addEventListener('unlock', () => document.getElementById('blocker').style.display = 'flex');
+
+        const blocker = document.getElementById('blocker');
+
+        // Auto-start after 1 second (you’re never stuck)
+        setTimeout(() => {
+            controls.lock();
+        }, 1000);
+
+        // Still allow manual click and ESC to show menu again
+        blocker.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => blocker.style.display = 'none');
+        controls.addEventListener('unlock', () => blocker.style.display = 'flex');
 
         scene.add(controls.getObject());
-        controls.getObject().position.y = 10; // eye height
+        controls.getObject().position.y = 10;
 
-        // ────────────────────── Simple movement ──────────────────────
-        let move = {f:false, b:false, l:false, r:false};
+        // Simple movement
+        let move = {f:0, b:0, l:0, r:0};
         const vel = new THREE.Vector3();
         const dir = new THREE.Vector3();
         let prev = performance.now();
 
         onkeydown = onkeyup = e => {
-            switch(e.code){
-                case 'KeyW': move.f = e.type==='keydown'; break;
-                case 'KeyS': move.b = e.type==='keydown'; break;
-                case 'KeyA': move.l = e.type==='keydown'; break;
-                case 'KeyD': move.r = e.type==='keydown'; break;
-            }
+            const down = e.type === 'keydown';
+            if (e.code==='KeyW') move.f = down;
+            if (e.code==='KeyS') move.b = down;
+            if (e.code==='KeyA') move.l = down;
+            if (e.code==='KeyD') move.r = down;
         };
 
-        // ────────────────────── Lights ──────────────────────
+        // Lights
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-        sun.position.set(100, 150, 50);
+        sun.position.set(100,150,50);
         sun.castShadow = true;
-        sun.shadow.mapSize.width = 2048;
-        sun.shadow.mapSize.height = 2048;
+        sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
         scene.add(sun);
 
-        // ─────────────────────── Grass floor ──────────────────────
-        const texLoader = new THREE.TextureLoader();
-        const grass = texLoader.load('Textures/Grass.png');
+        // Grass floor
+        const grass = new THREE.TextureLoader().load('Textures/Grass.png');
         grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
         grass.repeat.set(300,300);
         grass.encoding = THREE.sRGBEncoding;
@@ -97,104 +112,77 @@
         // ────────────────────── LOAD NPC FROM NESTED ZIP ──────────────────────
         async function loadNestedNPC() {
             try {
-                // 1. Load outer zip
-                const outerResp = await fetch('Models/NPC.zip');
-                const outerZip = await JSZip.loadAsync(await outerResp.arrayBuffer());
+                const resp = await fetch('Models/NPC.zip');
+                const outerZip = await JSZip.loadAsync(await resp.arrayBuffer());
 
-                // 2. Find and load the inner model.zip
                 const innerZipFile = Object.values(outerZip.files).find(f => 
-                    f.name.toLowerCase().endsWith('model.zip') || f.name.includes('model/model.zip')
+                    f.name.toLowerCase().includes('model.zip')
                 );
-                if (!innerZipFile) throw 'model.zip not found inside NPC.zip';
+                if (!innerZipFile) throw 'model.zip not found';
 
-                const innerZipData = await innerZipFile.async('arraybuffer');
-                const innerZip = await JSZip.loadAsync(innerZipData);
+                const innerZip = await JSZip.loadAsync(await innerZipFile.async('arraybuffer'));
 
-                // 3. Create Blob URLs for every file in BOTH zips
                 const urlMap = {};
-
-                // helper to add all files from a zip
-                async function addFiles(zip, prefix = '') {
-                    for (const [path, file] of Object.entries(zip.files)) {
-                        if (file.dir) continue;
-                        const blob = await file.async('blob');
-                        urlMap[prefix + path] = URL.createObjectURL(blob);
+                async function add(zip, prefix='') {
+                    for (const [p, f] of Object.entries(zip.files)) {
+                        if (f.dir) continue;
+                        urlMap[prefix + p] = URL.createObjectURL(await f.async('blob'));
                     }
                 }
+                await add(outerZip);
+                await add(innerZip, 'model/');
 
-                await addFiles(outerZip);           // textures folder, etc.
-                await addFiles(innerZip, 'model/'); // files from inner zip appear under "model/"
-
-                // 4. Find .mtl and .obj
                 const mtlFile = Object.keys(urlMap).find(k => k.toLowerCase().endsWith('.mtl'));
                 const objFile = Object.keys(urlMap).find(k => k.toLowerCase().endsWith('.obj'));
 
-                if (!objFile) throw 'No .obj file found inside the zips';
-
-                // 5. Custom LoadingManager that rewrites every URL to our blob URLs
                 const manager = new THREE.LoadingManager();
                 manager.setURLModifier(url => {
-                    // Three.js sometimes gives full URLs → extract path part
-                    try {
-                        const u = new URL(url);
-                        return urlMap[u.pathname.slice(1)] || url; // slice(1) removes leading /
-                    } catch {
-                        return urlMap[url] || url;
-                    }
+                    try { try { return urlMap[new URL(url).pathname.slice(1)] || url; } catch { return urlMap[url] || url; } }
                 });
 
                 const objLoader = new OBJLoader(manager);
-
                 if (mtlFile) {
-                    const mtlLoader = new MTLLoader(manager);
-                    const materials = await mtlLoader.loadAsync(urlMap[mtlFile]);
+                    const materials = await new MTLLoader(manager).loadAsync(urlMap[mtlFile]);
                     materials.preload();
                     objLoader.setMaterials(materials);
                 }
 
                 const obj = await objLoader.loadAsync(urlMap[objFile]);
+                obj.scale.set(2,2,2);           // change if your model is too small/big
+                obj.position.set(0, 0, -30);    // 30 m in front of spawn
+                obj.rotation.y = Math.PI;       // face player
 
-                // Scale & position (adjust these numbers to fit your model)
-                obj.scale.set(2, 2, 2);           // most free .obj characters are tiny
-                obj.position.set(0, 0, -30);       // 30 meters in front of player start
-                obj.rotation.y = Math.PI;         // face the player
-
-                obj.traverse(child => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
+                obj.traverse(c => {
+                    if (c.isMesh) { c.castShadow = c.receiveShadow = true; }
                 });
 
                 scene.add(obj);
-                console.log('NPC successfully loaded and placed in front of you!');
-
-            } catch (err) {
-                console.error('Could not load NPC:', err);
+                console.log('NPC loaded!');
+            } catch (e) {
+                console.error('NPC load failed:', e);
             }
         }
 
         loadNestedNPC();
 
-        // ────────────────────── Resize & animate ──────────────────────
-        window.addEventListener('resize', () => {
+        // Resize
+        addEventListener('resize', () => {
             camera.aspect = innerWidth / innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(innerWidth, innerHeight);
         });
 
+        // Animate
         function animate() {
             requestAnimationFrame(animate);
 
             if (controls.isLocked) {
-                const time = performance.now();
-                const delta = (time - prev) / 1000;
-
+                const delta = (performance.now() - prev) / 1000;
                 vel.x -= vel.x * 10 * delta;
                 vel.z -= vel.z * 10 * delta;
 
-                dir.z = Number(move.f) - Number(move.b);
-                dir.x = Number(move.r) - Number(move.l);
+                dir.z = move.f - move.b;
+                dir.x = move.r - move.l;
                 dir.normalize();
 
                 if (move.f || move.b) vel.z -= dir.z * 400 * delta;
@@ -202,9 +190,8 @@
 
                 controls.moveRight(-vel.x * delta);
                 controls.moveForward(-vel.z * delta);
-
                 controls.getObject().position.y = 10;
-                prev = time;
+                prev = performance.now();
             }
 
             renderer.render(scene, camera);
