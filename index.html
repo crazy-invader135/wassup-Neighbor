@@ -2,255 +2,213 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Simple 3D First-Person Grass World with NPC - Three.js</title>
+    <title>Grass World + NPC from nested ZIP</title>
     <style>
         body { margin: 0; overflow: hidden; }
-        #blocker {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #instructions {
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-family: Arial, sans-serif;
-            cursor: pointer;
-        }
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            color: white;
-            font-size: 30px;
-            pointer-events: none;
-            user-select: none;
-        }
+        #blocker { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+        #instructions { text-align: center; color: white; font-family: Arial, sans-serif; cursor: pointer; }
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: white; font-size: 30px; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="blocker">
         <div id="instructions">
             <h1>Click to play</h1>
-            <p>WASD to move<br>Mouse to look around<br>ESC to release pointer</p>
+            <p>WASD = move · Mouse = look · ESC = release cursor</p>
         </div>
     </div>
     <div id="crosshair">+</div>
 
     <script type="importmap">
     {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
-        }
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+      }
     }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import JSZip from 'https://cdn.skypack.dev/jszip@3';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+        import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 
+        // ────────────────────── Basic scene setup ──────────────────────
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x88ccff);
-        scene.fog = new THREE.Fog(0x88ccff, 10, 500);
+        scene.fog = new THREE.Fog(0x88ccff, 10, 800);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setSize(innerWidth, innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const controls = new PointerLockControls(camera, document.body);
-
-        const blocker = document.getElementById('blocker');
-        const instructions = document.getElementById('instructions');
-
-        instructions.addEventListener('click', () => controls.lock());
-
-        controls.addEventListener('lock', () => blocker.style.display = 'none');
-        controls.addEventListener('unlock', () => blocker.style.display = 'flex');
+        const controls = new PointerLockControls(camera, renderer.domElement);
+        document.getElementById('blocker').addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => document.getElementById('blocker').style.display = 'none');
+        controls.addEventListener('unlock', () => document.getElementById('blocker').style.display = 'flex');
 
         scene.add(controls.getObject());
-        controls.getObject().position.y = 10; // Player eye height
+        controls.getObject().position.y = 10; // eye height
 
-        // === Movement system ===
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
-        let prevTime = performance.now();
+        // ────────────────────── Simple movement ──────────────────────
+        let move = {f:false, b:false, l:false, r:false};
+        const vel = new THREE.Vector3();
+        const dir = new THREE.Vector3();
+        let prev = performance.now();
 
-        document.addEventListener('keydown', (event) => {
-            switch (event.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyD': moveRight = true; break;
+        onkeydown = onkeyup = e => {
+            switch(e.code){
+                case 'KeyW': move.f = e.type==='keydown'; break;
+                case 'KeyS': move.b = e.type==='keydown'; break;
+                case 'KeyA': move.l = e.type==='keydown'; break;
+                case 'KeyD': move.r = e.type==='keydown'; break;
             }
-        });
+        };
 
-        document.addEventListener('keyup', (event) => {
-            switch (event.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyD': moveRight = false; break;
-            }
-        });
-
-        // === Lighting ===
+        // ────────────────────── Lights ──────────────────────
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(100, 150, 50);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(50, 100, 30);
-        dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
-        dirLight.shadow.camera.near = 0.5;
-        dirLight.shadow.camera.far = 500;
-        dirLight.shadow.camera.left = -100;
-        dirLight.shadow.camera.right = 100;
-        dirLight.shadow.camera.top = 100;
-        dirLight.shadow.camera.bottom = -100;
-        scene.add(dirLight);
+        // ─────────────────────── Grass floor ──────────────────────
+        const texLoader = new THREE.TextureLoader();
+        const grass = texLoader.load('Textures/Grass.png');
+        grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
+        grass.repeat.set(300,300);
+        grass.encoding = THREE.sRGBEncoding;
 
-        // === Grass Floor ===
-        const textureLoader = new THREE.TextureLoader();
-        const grassTexture = textureLoader.load('Textures/Grass.png');
-        grassTexture.wrapS = THREE.RepeatWrapping;
-        grassTexture.wrapT = THREE.RepeatWrapping;
-        grassTexture.repeat.set(200, 200);
-        grassTexture.encoding = THREE.sRGBEncoding;
-
-        const groundGeometry = new THREE.PlaneGeometry(2000, 2000);
-        const groundMaterial = new THREE.MeshStandardMaterial({
-            map: grassTexture,
-            roughness: 0.8,
-            metalness: 0.1
-        });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(3000,3000),
+            new THREE.MeshStandardMaterial({ map: grass, roughness:0.9 })
+        );
+        ground.rotation.x = -Math.PI/2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // === Load NPC from ZIP in front of player start ===
-        async function loadNPC() {
+        // ────────────────────── LOAD NPC FROM NESTED ZIP ──────────────────────
+        async function loadNestedNPC() {
             try {
-                const response = await fetch('Models/NPC.zip');
-                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                const arrayBuffer = await response.arrayBuffer();
-                const zip = await JSZip.loadAsync(arrayBuffer);
+                // 1. Load outer zip
+                const outerResp = await fetch('Models/NPC.zip');
+                const outerZip = await JSZip.loadAsync(await outerResp.arrayBuffer());
 
-                const files = Object.values(zip.files).filter(item => !item.dir);
-                if (files.length === 0) throw new Error('No files found in ZIP');
-
-                // Find GLTF/GLB entry (prefer .gltf, take first match)
-                const modelFiles = files.filter(f => f.name.toLowerCase().endsWith('.gltf') || f.name.toLowerCase().endsWith('.glb'));
-                if (modelFiles.length === 0) throw new Error('No .gltf or .glb file found in ZIP');
-                const entryFile = modelFiles[0];
-
-                // Create Blob URLs for ALL files
-                const blobUrls = {};
-                await Promise.all(
-                    files.map(async (file) => {
-                        const blob = await file.async('blob');
-                        blobUrls[file.name] = URL.createObjectURL(blob);
-                    })
+                // 2. Find and load the inner model.zip
+                const innerZipFile = Object.values(outerZip.files).find(f => 
+                    f.name.toLowerCase().endsWith('model.zip') || f.name.includes('model/model.zip')
                 );
+                if (!innerZipFile) throw 'model.zip not found inside NPC.zip';
 
-                const entryUrl = blobUrls[entryFile.name];
+                const innerZipData = await innerZipFile.async('arraybuffer');
+                const innerZip = await JSZip.loadAsync(innerZipData);
 
-                // Custom LoadingManager to resolve ZIP resources
+                // 3. Create Blob URLs for every file in BOTH zips
+                const urlMap = {};
+
+                // helper to add all files from a zip
+                async function addFiles(zip, prefix = '') {
+                    for (const [path, file] of Object.entries(zip.files)) {
+                        if (file.dir) continue;
+                        const blob = await file.async('blob');
+                        urlMap[prefix + path] = URL.createObjectURL(blob);
+                    }
+                }
+
+                await addFiles(outerZip);           // textures folder, etc.
+                await addFiles(innerZip, 'model/'); // files from inner zip appear under "model/"
+
+                // 4. Find .mtl and .obj
+                const mtlFile = Object.keys(urlMap).find(k => k.toLowerCase().endsWith('.mtl'));
+                const objFile = Object.keys(urlMap).find(k => k.toLowerCase().endsWith('.obj'));
+
+                if (!objFile) throw 'No .obj file found inside the zips';
+
+                // 5. Custom LoadingManager that rewrites every URL to our blob URLs
                 const manager = new THREE.LoadingManager();
-                manager.setURLModifier((url) => {
+                manager.setURLModifier(url => {
+                    // Three.js sometimes gives full URLs → extract path part
                     try {
-                        const parsedUrl = new URL(url);
-                        const pathname = parsedUrl.pathname;
-                        const guidEndIndex = pathname.indexOf('/', 1);
-                        if (guidEndIndex === -1) return url;
-                        const relPath = pathname.substring(guidEndIndex + 1);
-                        return blobUrls[relPath] || url;
+                        const u = new URL(url);
+                        return urlMap[u.pathname.slice(1)] || url; // slice(1) removes leading /
                     } catch {
-                        return url;
+                        return urlMap[url] || url;
                     }
                 });
 
-                // Load the model
-                const loader = new GLTFLoader(manager);
-                loader.load(entryUrl, (gltf) => {
-                    const npc = gltf.scene;
-                    // Position in front of player start (adjust distance/scale as needed for your model)
-                    npc.position.set(0, 0, -30);
-                    npc.scale.set(1, 1, 1); // Scale your NPC model here
+                const objLoader = new OBJLoader(manager);
 
-                    // Enable shadows
-                    npc.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                        }
-                    });
+                if (mtlFile) {
+                    const mtlLoader = new MTLLoader(manager);
+                    const materials = await mtlLoader.loadAsync(urlMap[mtlFile]);
+                    materials.preload();
+                    objLoader.setMaterials(materials);
+                }
 
-                    scene.add(npc);
-                    console.log('NPC loaded and positioned!');
-                }, undefined, (error) => {
-                    console.error('Error loading GLTF:', error);
+                const obj = await objLoader.loadAsync(urlMap[objFile]);
+
+                // Scale & position (adjust these numbers to fit your model)
+                obj.scale.set(2, 2, 2);           // most free .obj characters are tiny
+                obj.position.set(0, 0, -30);       // 30 meters in front of player start
+                obj.rotation.y = Math.PI;         // face the player
+
+                obj.traverse(child => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
                 });
 
-                // Cleanup Blob URLs when model loaded (optional, but good practice)
-                // Note: Since one-time load, can revoke after some time if needed
-            } catch (error) {
-                console.error('Failed to load NPC.zip:', error);
+                scene.add(obj);
+                console.log('NPC successfully loaded and placed in front of you!');
+
+            } catch (err) {
+                console.error('Could not load NPC:', err);
             }
         }
 
-        loadNPC(); // Start loading
+        loadNestedNPC();
 
-        // === Resize handler ===
+        // ────────────────────── Resize & animate ──────────────────────
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = innerWidth / innerHeight;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(innerWidth, innerHeight);
         });
 
-        // === Animation loop ===
         function animate() {
             requestAnimationFrame(animate);
 
             if (controls.isLocked) {
                 const time = performance.now();
-                const delta = (time - prevTime) / 1000;
+                const delta = (time - prev) / 1000;
 
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
+                vel.x -= vel.x * 10 * delta;
+                vel.z -= vel.z * 10 * delta;
 
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize();
+                dir.z = Number(move.f) - Number(move.b);
+                dir.x = Number(move.r) - Number(move.l);
+                dir.normalize();
 
-                if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+                if (move.f || move.b) vel.z -= dir.z * 400 * delta;
+                if (move.l || move.r) vel.x -= dir.x * 400 * delta;
 
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
+                controls.moveRight(-vel.x * delta);
+                controls.moveForward(-vel.z * delta);
 
                 controls.getObject().position.y = 10;
-
-                prevTime = time;
+                prev = time;
             }
 
             renderer.render(scene, camera);
         }
-
         animate();
     </script>
 </body>
