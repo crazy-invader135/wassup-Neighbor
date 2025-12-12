@@ -2,10 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Simple Grass World – Actually Works</title>
+<title>Simple Grass World – You Can Actually Move</title>
 <style>
-  body { margin:0; overflow:hidden; }
-</style>
 </head>
 <body>
 
@@ -22,6 +20,7 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
+// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
 scene.fog = new THREE.Fog(0x88ccff, 100, 1000);
@@ -32,13 +31,12 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-const controls = new PointerLockControls(camera, renderer.domElement);
+const controls = new PointerLockControls(camera, document.body); // ← document.body, not renderer.domElement
 scene.add(controls.getObject());
 
-// Auto-start
-controls.lock();
-
-camera.position.y = 10;
+// Click anywhere to start (most reliable method)
+document.body.style.cursor = 'grab';
+document.body.addEventListener('click', () => controls.lock());
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
@@ -61,43 +59,64 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Movement
-const keys = {};
-addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
+// Player starts at eye height
+camera.position.y = 10;
 
+// Movement variables
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
-let prev = performance.now();
+let move = { forward: false, backward: false, left: false, right: false };
+let prevTime = performance.now();
 
+// Keyboard controls
+document.addEventListener('keydown', e => {
+  switch (e.code) {
+    case 'KeyW': move.forward  = true; break;
+    case 'KeyS': move.backward = true; break;
+    case 'KeyA': move.left     = true; break;
+    case 'KeyD': move.right    = true; break;
+  }
+});
+document.addEventListener('keyup', e => {
+  switch (e.code) {
+    case 'KeyW': move.forward  = false; break;
+    case 'KeyS': move.backward = false; break;
+    case 'KeyA': move.left     = false; break;
+    case 'KeyD': move.right    = false; break;
+  }
+});
+
+// Animation loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (controls.isLocked) {
-    const delta = (performance.now() - prev) / 1000;
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000;
 
     velocity.x -= velocity.x * 10 * delta;
     velocity.z -= velocity.z * 10 * delta;
 
-    direction.z = (keys['w'] ? 1 : 0) - (keys['s'] ? 1 : 0);
-    direction.x = (keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0);
+    direction.z = Number(move.forward) - Number(move.backward);
+    direction.x = Number(move.right) - Number(move.left);
     direction.normalize();
 
-    if (keys['w'] || keys['s']) velocity.z -= direction.z * 400 * delta;
-    if (keys['a'] || keys['d']) velocity.x -= direction.x * 400 * delta;
+    if (move.forward || move.backward) velocity.z -= direction.z * 400 * delta;
+    if (move.left || move.right) velocity.x -= direction.x * 400 * delta;
 
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
 
-    camera.position.y = 10;
-    prev = performance.now();
+    controls.getObject().position.y = 10; // stay at eye height
+    prevTime = time;
   }
 
   renderer.render(scene, camera);
 }
 animate();
 
-addEventListener('resize', () => {
+// Resize
+window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
