@@ -1,32 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basic 3D FPS Environment</title>
+    <meta charset="utf-8">
+    <title>Simple 3D First-Person Game - Three.js</title>
     <style>
-        body { margin: 0; overflow: hidden; } 
-        canvas { display: block; }
-        /* --- NEW CSS FOR CROSSHAIR --- */
+        body { margin: 0; overflow: hidden; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #instructions {
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            cursor: pointer;
+        }
         #crosshair {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 8px;
-            height: 8px;
-            margin-top: -4px; /* Half of height to center vertically */
-            margin-left: -4px; /* Half of width to center horizontally */
-            border: 2px solid white; /* Simple white square */
-            border-radius: 4px; /* Makes it a dot/circle */
-            box-shadow: 0 0 1px #000;
-            pointer-events: none; /* Crucial: allows clicks to pass through to the canvas */
-            z-index: 100;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            color: white;
+            font-size: 30px;
+            pointer-events: none;
+            user-select: none;
         }
-        /* ------------------------------ */
     </style>
 </head>
 <body>
-    <div id="crosshair"></div>
-    <script type="module" src="game.js"></script>
+    <div id="blocker">
+        <div id="instructions">
+            <h1>Click to play</h1>
+            <p>WASD to move<br>Mouse to look around<br>ESC to unlock pointer</p>
+        </div>
+    </div>
+    <div id="crosshair">+</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x88ccff);
+        scene.fog = new THREE.Fog(0x88ccff, 0, 500);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.y = 10;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new PointerLockControls(camera, document.body);
+
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+
+        instructions.addEventListener('click', function () {
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', function () {
+            blocker.style.display = 'none';
+        });
+
+        controls.addEventListener('unlock', function () {
+            blocker.style.display = 'flex';
+        });
+
+        scene.add(controls.getObject());
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(50, 100, 10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(200, 200);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Some random boxes as obstacles/environment
+        const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xff8888 });
+        for (let i = 0; i < 50; i++) {
+            const size = Math.random() * 10 + 5;
+            const boxGeometry = new THREE.BoxGeometry(size, size, size);
+            const box = new THREE.Mesh(boxGeometry, boxMaterial);
+            box.position.set(Math.random() * 180 - 90, size / 2, Math.random() * 180 - 90);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            scene.add(box);
+        }
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
 </body>
 </html>
