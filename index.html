@@ -2,95 +2,136 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Grass World – No Click, Just Works</title>
-<style>body{margin:0;overflow:hidden;background:#88ccff}</style>
+<title>Simple Grass World – Walking Fixed</title>
+<style>
+  body { margin:0; overflow:hidden; }
+  #instructions {
+    position: absolute; top: 20px; left: 20px; color: white; background: #0008;
+    padding: 15px; border-radius: 10px; font-family: Arial; pointer-events: none;
+  }
+</style>
 </head>
 <body>
 
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js';
-import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/PointerLockControls.js';
+<div id="instructions">Click to start · WASD to move · Mouse to look · ESC to pause</div>
 
-// Scene
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
-scene.fog = new THREE.Fog(0x88ccff, 100, 1500);
+scene.fog = new THREE.Fog(0x88ccff, 100, 1000);
 
-// Camera & renderer
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-// Controls — IMPORTANT: second argument is document.body
 const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
-// Force pointer lock immediately (works in all modern browsers when triggered by user gesture or on load in many cases)
-requestPointerLock = requestPointerLock || document.body.mozRequestPointerLock || document.body.webkitRequestPointerLock;
-document.body.requestPointerLock?.();
-
-// If the above fails, fall back to a tiny invisible click
-document.body.addEventListener('click', () => controls.lock(), {once:true});
+// Click to activate pointer lock
+document.body.addEventListener('click', () => controls.lock());
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(100,200,100);
+sun.position.set(100, 200, 100);
 sun.castShadow = true;
 scene.add(sun);
 
-// Grass
+// Grass floor
 const tex = new THREE.TextureLoader().load('Textures/Grass.png');
 tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-tex.repeat.set(1000,1000);
+tex.repeat.set(800, 800);
+tex.encoding = THREE.sRGBEncoding;
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(100000,100000),
-  new THREE.MeshStandardMaterial({map:tex})
+  new THREE.PlaneGeometry(20000, 20000),
+  new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 })
 );
-ground.rotation.x = -Math.PI/2;
+ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+// Player eye height
 camera.position.y = 10;
 
-// Movement
-const move = {f:false,b:false,l:false,r:false};
-document.addEventListener('keydown', e=>{
-  if(e.code==='KeyW') move.f=true;
-  if(e.code==='KeyS') move.b=true;
-  if(e.code==='KeyA') move.l=true;
-  if(e.code==='KeyD') move.r=true;
+// Movement state
+const move = { forward: false, backward: false, left: false, right: false };
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+let prevTime = performance.now();
+
+// Keyboard input
+document.addEventListener('keydown', e => {
+  switch (e.code) {
+    case 'KeyW': move.forward  = true; break;
+    case 'KeyS': move.backward = true; break;
+    case 'KeyA': move.left     = true; break;
+    case 'KeyD': move.right    = true; break;
+  }
 });
-document.addEventListener('keyup', e=>{
-  if(e.code==='KeyW') move.f=false;
-  if(e.code==='KeyS') move.b=false;
-  if(e.code==='KeyA') move.l=false;
-  if(e.code==='KeyD') move.r=false;
+document.addEventListener('keyup', e => {
+  switch (e.code) {
+    case 'KeyW': move.forward  = false; break;
+    case 'KeyS': move.backward = false; break;
+    case 'KeyA': move.left     = false; break;
+    case 'KeyD': move.right    = false; break;
+  }
 });
 
-function animate(){
+// Animation loop — FIXED ORDER
+function animate() {
   requestAnimationFrame(animate);
 
-  if(controls.isLocked){
-    const speed = 20;
-    if(move.f) controls.moveForward(speed);
-    if(move.b) controls.moveForward(-speed);
-    if(move.r) controls.moveRight(speed);
-    if(move.l) controls.moveRight(-speed);
+  if (controls.isLocked) {
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000; // correct delta
+
+    // Dampen velocity
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    // Input direction
+    direction.z = Number(move.forward) - Number(move.backward);
+    direction.x = Number(move.right) - Number(move.left);
+    direction.normalize();
+
+    // Apply acceleration
+    if (move.forward || move.backward) velocity.z -= direction.z * 400.0 * delta;
+    if (move.left || move.right) velocity.x -= direction.x * 400.0 * delta;
+
+    // Move the player
+    controls.moveRight(-velocity.x * delta);
+    controls.moveForward(-velocity.z * delta);
+
+    // Keep player at ground level + eye height
     controls.getObject().position.y = 10;
+
+    prevTime = time; // update prevTime at the end
   }
 
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }
 animate();
 
-// Resize
-addEventListener('resize',()=>{
-  camera.aspect = innerWidth/innerHeight;
+// Resize handler
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
 </body>
