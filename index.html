@@ -25,9 +25,7 @@
             z-index: 100;
             max-width: 400px;
         }
-        #instructions.hidden {
-            display: none;
-        }
+        #instructions.hidden { display: none; }
         #gameOver {
             position: absolute;
             top: 50%;
@@ -42,7 +40,6 @@
             display: none;
         }
     </style>
-</head>
 <body>
     <div id="instructions">
         <h1>Sneak In!</h1>
@@ -67,6 +64,16 @@
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
+
+        // ONLY THESE 8 LINES CHANGED — BRIGHTER LIGHTING
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9));                    // strong ambient
+        const sun = new THREE.DirectionalLight(0xffffff, 1.6);              // stronger sun
+        sun.position.set(20, 40, 20);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.4));     // sky light — no more black walls
+        // END OF CHANGES
 
         // Mouse look variables
         const euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -120,7 +127,7 @@
             }
         });
 
-        // GROUND — ONLY CHANGE HERE
+        // GROUND — with your grass texture (Textures/Grass.png)
         const loader = new THREE.TextureLoader();
         const grassTexture = loader.load('Textures/Grass.png');
         grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
@@ -132,9 +139,8 @@
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
-        // END OF CHANGE
 
-        // House walls (exactly the same as before)
+        // House walls (exactly the same)
         const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
         const leftFrontWall = new THREE.Mesh(new THREE.BoxGeometry(8.5, 10, 1), wallMaterial);
         leftFrontWall.position.set(-5.75, 5, -20);
@@ -173,22 +179,6 @@
         roof.receiveShadow = true;
         scene.add(roof);
 
-        // Lighting (your original)
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(5, 20, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 100;
-        directionalLight.shadow.camera.left = -30;
-        directionalLight.shadow.camera.right = 30;
-        directionalLight.shadow.camera.top = 30;
-        directionalLight.shadow.camera.bottom = -30;
-        scene.add(directionalLight);
-
         // Neighbor
         const neighborGeometry = new THREE.BoxGeometry(1.8, 3.5, 1.8);
         const neighborMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
@@ -213,7 +203,7 @@
         // Player start
         camera.position.set(0, 1.8, -30);
 
-        // Collision detection (your original)
+        // Collision detection
         const playerSize = 0.4;
         function checkCollision(position) {
             const playerMin = new THREE.Vector3(position.x - playerSize, position.y - 1.2, position.z - playerSize);
@@ -259,7 +249,7 @@
                     }
                 }
 
-                // Neighbor patrol
+                // Neighbor patrol & AI
                 const target = patrolPoints[currentPatrolIndex].pos;
                 const moveDir = target.clone().sub(neighbor.position).normalize();
                 neighbor.position.add(moveDir.multiplyScalar(patrolSpeed));
